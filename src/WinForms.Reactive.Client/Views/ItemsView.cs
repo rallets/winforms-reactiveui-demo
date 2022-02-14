@@ -125,8 +125,6 @@ public partial class ItemsView : UserControl, IViewFor<ItemsViewModel>
 					view => view.txtSearchEndsWith.Text)
 				.DisposeWith(disposableRegistration);
 
-
-
 			/*
 			 * WinForms Events
 			 *

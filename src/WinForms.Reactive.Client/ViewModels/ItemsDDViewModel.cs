@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.ComponentModel;
 using System.Reactive;
 using System.Reactive.Linq;
 using DynamicData;
@@ -11,10 +11,7 @@ using WinForms.Reactive.Client.Services;
 namespace WinForms.Reactive.Client.ViewModels;
 
 /*
- * Here we are using Dynamic Data, because WinWorms doesn't support `ReadOnlyObservableCollection`
- * but actually the constant SUPPORTS_BINDINGLIST is not defined for net6.0-windows
- * see: https://github.com/reactivemarbles/DynamicData/blob/ec02c3b84d6272b812c3ad5c21b2ee30ce8b41e7/src/DynamicData/List/ObservableListEx.cs#L349
- * so this is not working yet.
+ * Here we are using Dynamic Data
  */
 
 public enum ItemsOrderBy
@@ -40,7 +37,7 @@ public class ItemsDDViewModel : ReactiveObject, IRoutableViewModel
 	[Reactive] public ItemsOrderBy OrderBy { get; set; } = ItemsOrderBy.Name;
 
 	private readonly SourceCache<ItemDto, Guid> _items;
-	public ReadOnlyObservableCollection<ItemDto> Items;
+	public BindingList<ItemDto> Items { get; } = new();
 
 	public ItemsDDViewModel(
 		IItemsService? itemsService = null
@@ -97,23 +94,11 @@ public class ItemsDDViewModel : ReactiveObject, IRoutableViewModel
 			.Filter(filter)
 			.Sort(sortBy)
 			.ObserveOn(RxApp.MainThreadScheduler)
-			.Bind(out Items)
+			.Bind(Items)
 			.Subscribe(x =>
 			{
 				var changeSet = x;
 			});
-
-		/*
-		 * NB. I'm emitting here in the costructor only for debugging purposes, as it's not yet supported in winforms.
-		 */
-		var staticItems = new List<ItemDto> {
-			new (Guid.NewGuid(), "Name 1", new List<ItemTagDto> {
-				new (Guid.NewGuid(), "Sub 1"),
-				new (Guid.NewGuid(), "Sub 2")
-			}),
-			new (Guid.NewGuid(), "Name 2", new List<ItemTagDto>()),
-		};
-		_items.Edit(innerCache => innerCache.AddOrUpdate(staticItems));
 
 		/*
 		 * `LoadItemsCommand` is a command that returns a list from an async call (from an asyc backend, for example).
@@ -129,7 +114,11 @@ public class ItemsDDViewModel : ReactiveObject, IRoutableViewModel
 			/*
 			* Here we are using `Edit` that supports atomic updates, so we change the dataset with only one emit.
 			*/
-			_items.Edit(innerCache => innerCache.AddOrUpdate(x));
+			_items.Edit(innerCache =>
+			{
+				innerCache.Clear();
+				innerCache.AddOrUpdate(x);
+			});
 		});
 
 	}

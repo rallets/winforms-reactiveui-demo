@@ -57,9 +57,9 @@ public partial class ItemsDDView : UserControl, IViewFor<ItemsDDViewModel>
 					viewModel => viewModel.Items,
 					view => view.lstItems.DataSource,
 					value =>
-						{
-							return value;
-						})
+					{
+						return value;
+					})
 				.DisposeWith(disposableRegistration);
 
 			this.Bind(ViewModel,
@@ -87,8 +87,14 @@ public partial class ItemsDDView : UserControl, IViewFor<ItemsDDViewModel>
 				.Select(_ => cmbSortBy.SelectedValue as ItemsOrderBy?)
 				.BindTo(ViewModel, vm => vm.OrderBy);
 
+			// And here we listen to OrderBy changes and then select the right element in the ComboBox.
+			this.OneWayBind(ViewModel,
+					viewModel => viewModel.OrderBy,
+					view => view.cmbSortBy.SelectedIndex,
+					value => cmbSortBy.Items.IndexOf<OrderByInfo<ItemsOrderBy>>(item => item.value.Id == value)
+				)
+				.DisposeWith(disposableRegistration);
 		});
 	}
-
 
 }
