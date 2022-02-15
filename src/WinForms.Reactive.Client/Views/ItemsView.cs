@@ -29,10 +29,6 @@ public partial class ItemsView : UserControl, IViewFor<ItemsViewModel>
 
 		this.WhenActivated(disposableRegistration =>
 		{
-			//this.WhenAnyValue(x => x.ViewModel.LoadItemsCommand)
-			//	.SelectMany(x => x.Execute())
-			//	.Subscribe();
-
 			// this will start the command used to load the items as the view is ready
 			this.WhenAnyValue(view => view.ViewModel.LoadItemsCommand)
 				.Select(cmd => Unit.Default)
@@ -82,23 +78,7 @@ public partial class ItemsView : UserControl, IViewFor<ItemsViewModel>
 					value => value)
 				.DisposeWith(disposableRegistration);
 
-			//this.BindCommand(ViewModel,
-			//           vm => vm.LoadCommand,
-			//           v => v.btnLoad)
-			//          .DisposeWith(disposableRegistration);
-
-			//this.OneWayBind(ViewModel,
-			//		viewModel => viewModel.SearchResults,
-			//		view => view.lstItems.Items)
-			//	.DisposeWith(disposableRegistration);
-
-			//this.OneWayBind(ViewModel,
-			//		viewModel => viewModel.SearchResults,
-			//		view => view.lstItems.DataSource,
-			//		vmToViewConverterOverride: new ListBoxItemsConverter())
-			//	.DisposeWith(disposableRegistration);
-
-			// see how ListView DataSource works:
+			// see how ListBox DataSource works:
 			// https://docs.microsoft.com/en-us/dotnet/api/system.windows.forms.listcontrol.displaymember?view=windowsdesktop-6.0
 			// The DataSource contains a list of our models, and we use `DisplayMember` and `ValueMember` to display the data
 			this.OneWayBind(ViewModel,
@@ -106,6 +86,7 @@ public partial class ItemsView : UserControl, IViewFor<ItemsViewModel>
 					view => view.lstItems.DataSource,
 					value =>
 						{
+							// debug tip: here you can inspect the reactive property emitted value 
 							return value;
 						})
 				.DisposeWith(disposableRegistration);
@@ -137,7 +118,9 @@ public partial class ItemsView : UserControl, IViewFor<ItemsViewModel>
 
 			/*
 			 * This is a temporary solution to listen to ListBox events.
-			 * In this case we send a tuple with the index to make sure the emitted value is unique (read it as `change detection`) and then the subscribe will get the next value.
+			 * In this case we send a tuple with the index to make sure the emitted value is unique (read it as `change detection`) 
+			 * and then the subscribe will get the next value.
+			 * NB. this is not a bidirectional binding: if you want to update the SelectedValue from the ViewModel, take a look how it's done in `ItemsDDView`. 
 			 */
 			Observable.FromEventPattern(ev => lstItems.SelectedIndexChanged += ev, ev => lstItems.SelectedIndexChanged -= ev)
 				.Select(_ => (item: lstItems.SelectedValue as Guid?, index: lstItems.SelectedIndex))

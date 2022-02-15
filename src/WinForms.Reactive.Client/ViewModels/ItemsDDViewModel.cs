@@ -104,9 +104,7 @@ public class ItemsDDViewModel : ReactiveObject, IRoutableViewModel
 		 * `LoadItemsCommand` is a command that returns a list from an async call (from an asyc backend, for example).
 		 *
 		 * We guard agains multiple execution via the `canExecute` condition.
-		 * We set a flag `IsExecuting` to show a progressbar/spinner.
 		 * We can handle exceptions if needed.
-		 * We refresh automatically the list every 5 minutes.
 		 */
 		LoadItemsCommand = ReactiveCommand.CreateFromTask(LoadItems);
 		LoadItemsCommand.ObserveOn(RxApp.MainThreadScheduler).Subscribe(x =>
