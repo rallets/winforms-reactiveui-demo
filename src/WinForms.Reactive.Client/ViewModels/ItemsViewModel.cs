@@ -1,4 +1,5 @@
 ﻿using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
@@ -43,7 +44,7 @@ public class ItemsViewModel : ReactiveObject, IRoutableViewModel
 	private IItemsService _itemsService;
 
 	public string UrlPathSegment => nameof(ItemsViewModel);
-	public IScreen HostScreen { get; protected set; }
+	public IScreen HostScreen { get; protected set; } = null!;
 
 	// Commands
 	public ReactiveCommand<Unit, IEnumerable<ItemDto>> LoadItemsCommand { get; }
@@ -54,19 +55,21 @@ public class ItemsViewModel : ReactiveObject, IRoutableViewModel
 	[Reactive] public string SearchEndsWith { get; set; } = string.Empty;
 	[Reactive] public (Guid? tagId, int index) SelectedItem { get; set; }
 
-	// Output
-	[ObservableAsProperty] public IEnumerable<ItemDto> Items { get; } = new List<ItemDto>();
-	[ObservableAsProperty] public IEnumerable<ItemDto> ItemsFiltered { get; } = new List<ItemDto>();
-	[ObservableAsProperty] public IEnumerable<ItemTagDto> SelectedItemTags { get; }
-	[ObservableAsProperty] public bool IsLoading { get; } = false;
-	[ObservableAsProperty] public bool HasItems { get; } = false;
-	[ObservableAsProperty] public bool HasItemSelection { get; } = false;
-	[ObservableAsProperty] public bool HasSubItems { get; } = false;
+	// Output - OAPH must be initialized via `initialValue` parameter in .ToPropertyEx(...)
+	[ObservableAsProperty] public IEnumerable<ItemDto> Items { get; }
+	[ObservableAsProperty] public IEnumerable<ItemDto> ItemsFiltered { get; } 
+	[ObservableAsProperty] public IEnumerable<ItemTagDto> SelectedItemTags { get; } 
+	[ObservableAsProperty] public bool IsLoading { get; } 
+	[ObservableAsProperty] public bool HasItems { get; } 
+	[ObservableAsProperty] public bool HasItemSelection { get; } 
+	[ObservableAsProperty] public bool HasSubItems { get; } 
 
 	public ItemsViewModel(
+		IScheduler mainThreadScheduler = null,
 		IItemsService? itemsService = null
 		)
 	{
+		mainThreadScheduler = mainThreadScheduler ?? RxApp.MainThreadScheduler;
 		_itemsService = itemsService ?? Locator.Current.GetService<IItemsService>()!;
 
 		/*
@@ -77,19 +80,20 @@ public class ItemsViewModel : ReactiveObject, IRoutableViewModel
 		 * We can handle exceptions if needed.
 		 * We refresh automatically the list every 5 minutes.
 		 */
-		LoadItemsCommand = ReactiveCommand.CreateFromTask(LoadItems, LoadItemsCommand?.IsExecuting.Select(x => !x));
-		LoadItemsCommand.IsExecuting.ToPropertyEx(this, x => x.IsLoading);
+		LoadItemsCommand = ReactiveCommand.CreateFromTask(LoadItems, LoadItemsCommand?.IsExecuting.Select(x => !x), mainThreadScheduler);
+		LoadItemsCommand.IsExecuting.ToPropertyEx(this, x => x.IsLoading, initialValue: false);
 		//LoadItemsCommand.ThrownExceptions.Subscribe(error => { /* Handle errors here */ });
 		LoadItemsCommand
-			.ObserveOn(RxApp.MainThreadScheduler)
-			.ToPropertyEx(this, x => x.Items);
+			.ObserveOn(mainThreadScheduler)
+			.ToPropertyEx(this, x => x.Items, initialValue: Enumerable.Empty<ItemDto>());
 
 		var interval = TimeSpan.FromMinutes(5);
-		Observable.Timer(interval, interval)
+		Observable.Timer(interval, interval, mainThreadScheduler)
 			.Select(time => Unit.Default)
+			.ObserveOn(mainThreadScheduler)
 			.InvokeCommand(this, x => x.LoadItemsCommand);
 
-		ShowDetailsCommand = ReactiveCommand.CreateFromTask(ShowDetails, this.WhenAnyValue(x => x.HasItemSelection));
+		ShowDetailsCommand = ReactiveCommand.CreateFromTask(ShowDetails, this.WhenAnyValue(x => x.HasItemSelection), mainThreadScheduler);
 
 		/*
 		 * `WhenAny` is he same as `Observable.CombineLatest`.
@@ -104,7 +108,7 @@ public class ItemsViewModel : ReactiveObject, IRoutableViewModel
 		 * .etc
 		 */
 		this.WhenAny(x => x.Items, x => x.SearchStartsWith, x => x.SearchEndsWith, (items, startsWith, endsWith) => (items, startsWith, endsWith))
-			.Throttle(TimeSpan.FromMilliseconds(800))
+			.Throttle(TimeSpan.FromMilliseconds(800), mainThreadScheduler)
 			.DistinctUntilChanged()
 			.Select(x =>
 			{
@@ -121,31 +125,31 @@ public class ItemsViewModel : ReactiveObject, IRoutableViewModel
 				return r;
 			})
 			.Catch(Observable.Return(Enumerable.Empty<ItemDto>()))
-			.ObserveOn(RxApp.MainThreadScheduler)
-			.ToPropertyEx(this, x => x.ItemsFiltered);
+			.ObserveOn(mainThreadScheduler)
+			.ToPropertyEx(this, x => x.ItemsFiltered, initialValue: Enumerable.Empty<ItemDto>());
 
 		this
 			.WhenAnyValue(x => x.Items)
 			.Select(items => items != null && items.Any())
-			.ToPropertyEx(this, x => x.HasItems);
+			.ToPropertyEx(this, x => x.HasItems, initialValue: false, scheduler: mainThreadScheduler);
 
 		this
 			.WhenAnyValue(x => x.SelectedItem)
 			.Select(x => x.tagId != null)
-			.ToPropertyEx(this, x => x.HasItemSelection);
+			.ToPropertyEx(this, x => x.HasItemSelection, initialValue: false, scheduler: mainThreadScheduler);
 
 		this
 			.WhenAny(x => x.SelectedItem, x => x.Items, (selectedItem, items) => (selectedItem, items))
 			.Select(x => (Items?.FirstOrDefault(item => item.ItemId == x.selectedItem.Value.tagId)?.Tags?.Count() ?? 0) > 0)
-			.ToPropertyEx(this, x => x.HasSubItems);
+			.ToPropertyEx(this, x => x.HasSubItems, initialValue: false, scheduler: mainThreadScheduler);
 
 		this.WhenAnyValue(x => x.SelectedItem)
-			.Throttle(TimeSpan.FromMilliseconds(800))
+			.Throttle(TimeSpan.FromMilliseconds(800), mainThreadScheduler)
 			.Where(x => x.tagId != null)
 			.Select(x => x.tagId!.Value)
 			.SelectMany(FetchDetailAsync)
-			.ObserveOn(RxApp.MainThreadScheduler)
-			.ToPropertyEx(this, x => x.SelectedItemTags);
+			.ObserveOn(mainThreadScheduler)
+			.ToPropertyEx(this, x => x.SelectedItemTags, initialValue: Enumerable.Empty<ItemTagDto>());
 	}
 
 	private async Task<Unit> ShowDetails(CancellationToken token)
